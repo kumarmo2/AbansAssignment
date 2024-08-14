@@ -41,7 +41,7 @@ public struct ABXRequest
 public class ABXResponsePacket
 {
     public static int PACKET_SIZE_BYTES = 17;
-    public uint Symbol { get; set; }
+    public string Symbol { get; set; }
     public char OrderType { get; set; }
     public uint Quantity { get; set; }
     public uint Price { get; set; }

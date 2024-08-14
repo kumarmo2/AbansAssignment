@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Linq;
 using System.Net.Sockets;
 
 namespace ABXConsoleClient;
@@ -37,29 +38,61 @@ public class Worker
             return (int)first.Sequence - (int)second.Sequence;
         });
 
-        foreach (var item in intermediateResults)
-        {
-            _logger.LogInformation("seq: {seq}", item.Sequence);
-        }
+        var lastSeq = intermediateResults[intermediateResults.Count - 1].Sequence;
+        _logger.LogInformation("lastSeq: {lastSeq}", lastSeq);
+
+        var presentSequences = intermediateResults.ToDictionary(i => i.Sequence);
+        var finalResult = new List<ABXResponsePacket>();
 
         Span<byte> singlePacketBuffer = stackalloc byte[ABXResponsePacket.PACKET_SIZE_BYTES];
-        using (var client = new TcpClient())
+        var client = new TcpClient();
+        client.Connect(address, port);
+        uint i = 1;
+        while (i <= lastSeq)
         {
-            client.Connect(address, port);
-            using (var stream = client.GetStream())
+            if (presentSequences.ContainsKey(i))
             {
-                ABXRequest request = new ABXRequest { CallType = ABXRequest.RESEND_PACKET, ResendSeq = 1 };
-                _logger.LogInformation("writing request for ResendSeq");
-                request.WriteToSTream(stream);
-                _logger.LogInformation("done writing request for ResendSeq");
-                // TODO: maybe add re-trying logic.
-                var (bytesRead, packet) = ReadPacket(singlePacketBuffer, stream);
-                _logger.LogInformation("bytes read, {bytesRead} ", bytesRead);
-                if (packet is not null)
+                finalResult.Add(presentSequences[i]);
+                i++;
+                continue;
+            }
+            try
+            {
+                _logger.LogInformation("packet i: {i} is missing, isClientConnected: {isClientConnected}", i, client.Connected);
+                if (!client.Connected)
                 {
-                    _logger.LogInformation("asked seq: {seq}", packet.Sequence);
+                    client = new TcpClient();
+                    client.Connect(address, port);
+                    // _logger.LogInformation("connected again, isClientConnected: {isClientConnected}", client.Connected);
+                }
+                using (var stream = client.GetStream())
+                {
+                    // _logger.LogInformation(">>> got the stream");
+                    stream.ReadTimeout = 500;
+                    ABXRequest request = new ABXRequest { CallType = ABXRequest.RESEND_PACKET, ResendSeq = (byte)i };
+                    // _logger.LogInformation("writing request for missing ResendSeq, seq: {i}", i);
+                    request.WriteToSTream(stream);
+                    // _logger.LogInformation(">>>>> write done");
+                    // TODO: maybe add re-trying logic.
+                    var (bytesRead, packet) = ReadPacket(singlePacketBuffer, stream);
+                    // _logger.LogInformation(">>>>> read also done");
+                    if (bytesRead == 0)
+                    {
+                        // TODO: add re-trying logic.
+                    }
+                    finalResult.Add(packet);
+                    i++;
                 }
             }
+            catch (Exception)
+            {
+                // _logger.LogInformation("... should be retried for i: {i}", i);
+            }
+        }
+
+        foreach (var item in finalResult)
+        {
+            _logger.LogInformation("seq: {seq}", item.Sequence);
         }
 
     }
@@ -106,28 +139,12 @@ public class Worker
 
                 }
             }
-
-            // if (bytesReceived == 0)
-            // {
-            //     _logger.LogInformation("recieved all the bytes");
-            //     return;
-            // }
-            // _logger.LogInformation("bytesReceived: {bytesReceived}", bytesReceived);
-            // if (bytesReceived != ABXResponsePacket.PACKET_SIZE_BYTES)
-            // {
-            //     throw new Exception("wrong packet ")
-            // }
-            // using (var stream = tcpClient.GetStream())
-            // {
-            //     // ABXRequest request = new ABXRequest { CallType = ABXRequest.STREAM_ALL, ResendSeq = 0 };
-            //
-            // }
         }
-        _logger.LogInformation("...... ending");
     }
     private (int, ABXResponsePacket) ReadPacket(Span<byte> singlePacketBuffer, Stream bufStream)
     {
 
+        Span<char> chars = stackalloc char[4];
         var readBytes = bufStream.Read(singlePacketBuffer);
         if (readBytes <= 0)
         {
@@ -138,7 +155,12 @@ public class Worker
             throw new Exception("wrong size of the packet;");
         }
         var symbolBytes = singlePacketBuffer.Slice(0, 4);
-        var symbol = BinaryPrimitives.ReadUInt32BigEndian(symbolBytes);
+        for (var j = 0; j < 4; j++)
+        {
+            chars[j] = (char)symbolBytes[j];
+        }
+        var symbolString = new String(chars);
+        // var symbol = BinaryPrimitives.ReadUInt32BigEndian(symbolBytes);
         var orderType = (char)singlePacketBuffer[4];
         var quantityBytes = singlePacketBuffer.Slice(5, 4);
         var quantity = BinaryPrimitives.ReadUInt32BigEndian(quantityBytes);
@@ -146,11 +168,11 @@ public class Worker
         var price = BinaryPrimitives.ReadUInt32BigEndian(priceBytes);
         var seqBytes = singlePacketBuffer.Slice(13, 4);
         var seq = BinaryPrimitives.ReadUInt32BigEndian(seqBytes);
-        _logger.LogInformation($"symbol: {symbol}, orderType: {orderType}, quantity: {quantity}, price: {price}, seq: {seq}");
+        // _logger.LogInformation($"symbolString: {symbolString},  orderType: {orderType}, quantity: {quantity}, price: {price}, seq: {seq}");
         var packet = new ABXResponsePacket
         {
             Price = price,
-            Symbol = symbol,
+            Symbol = symbolString,
             Quantity = quantity,
             Sequence = seq,
             OrderType = orderType,
@@ -158,13 +180,3 @@ public class Worker
         return (readBytes, packet);
     }
 }
-// var symbolBytes = singlePacketBuffer.Slice(0, 4);
-// var symbol = BinaryPrimitives.ReadUInt32BigEndian(symbolBytes);
-// var orderType = (char)singlePacketBuffer[4];
-// var quantityBytes = singlePacketBuffer.Slice(5, 4);
-// var quantity = BinaryPrimitives.ReadUInt32BigEndian(quantityBytes);
-// var priceBytes = singlePacketBuffer.Slice(9, 4);
-// var price = BinaryPrimitives.ReadUInt32BigEndian(priceBytes);
-// var seqBytes = singlePacketBuffer.Slice(9, 4);
-// var seq = BinaryPrimitives.ReadUInt32BigEndian(seqBytes);
-// _logger.LogInformation($"symbol: {symbol}, orderType: {orderType}, quantity: {quantity}, price: {price}, seq: {seq}");
