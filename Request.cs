@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+
 namespace ABXConsoleClient;
 
 
@@ -25,7 +27,12 @@ public struct ABXRequest
             stream.Flush();
             return;
         }
-        throw new NotImplementedException();
+        Span<byte> bytes = stackalloc byte[5];
+        bytes[0] = CallType;
+        bytes[1] = ResendSeq;
+        stream.Write(bytes);
+        stream.Flush();
+
     }
 }
 
