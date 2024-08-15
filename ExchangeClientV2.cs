@@ -24,8 +24,8 @@ public class ExchangeClientV2 : IABXExchangeServerClient
         var tcp = new TcpClient();
         tcp.Connect(_exchangeServerConfig.Host, _exchangeServerConfig.Port);
         var stream = tcp.GetStream();
-        stream.ReadTimeout = 500;
-        stream.WriteTimeout = 500;
+        stream.ReadTimeout = 200;
+        stream.WriteTimeout = 200;
         _tcp = tcp;
         _stream = stream;
     }
@@ -105,7 +105,7 @@ public class ExchangeClientV2 : IABXExchangeServerClient
         {
             try
             {
-                _logger.LogInformation("get packet, retryNum: {retryNum}", retryNum);
+                _logger.LogInformation("get packet: {packet}, retryNum: {retryNum}", seq, retryNum);
                 ABXRequest request = new ABXRequest { CallType = ABXRequest.RESEND_PACKET, ResendSeq = (byte)seq };
                 request.WriteToSTream(_stream);
                 var (bytesRead, packet) = ReadPacketV2(singlePacketBuffer, _stream);
@@ -147,7 +147,7 @@ public class ExchangeClientV2 : IABXExchangeServerClient
             {
                 try
                 {
-
+                    _logger.LogInformation(">>>> GetAllStreamResponse, retryNum: {retryNum}", retryNum);
                     var request = new ABXRequest { CallType = ABXRequest.STREAM_ALL, ResendSeq = 0 };
                     request.WriteToSTream(_stream);
                     while (true)

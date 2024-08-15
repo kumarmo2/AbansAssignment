@@ -28,8 +28,9 @@ public class Worker
             throw new Exception("Even After retrying, could not connect to the exchange server");
         }
         intermediateResults = allStreamResult.Ok;
-        _logger.LogInformation(">>>> stream was fetched <<<<");
-        Thread.Sleep(5000);
+        var waitMs = 2000;
+        _logger.LogInformation(">>>> stream was fetched. Just waiting for {waitMs} milliseconds <<<<", waitMs);
+        Thread.Sleep(waitMs);
         intermediateResults.Sort((first, second) =>
                 {
                     return (int)first.Sequence - (int)second.Sequence;
@@ -49,10 +50,7 @@ public class Worker
                 i++;
                 continue;
             }
-            // _logger.LogInformation("packet i: {i} is missing, isClientConnected: {isClientConnected}", i, client.Connected);
             _logger.LogInformation("packet i: {i} is missing", i);
-            Thread.Sleep(5000);
-            // _logger.LogInformation(">>> got the stream");
             var packetResult = client.GetPacket((byte)i);
             if (packetResult.Err != null)
             {
@@ -69,7 +67,7 @@ public class Worker
 
         foreach (var item in finalResult)
         {
-            _logger.LogInformation("seq: {seq}", item.Sequence);
+            _logger.LogDebug("seq: {seq}", item.Sequence);
         }
 
         var packets = System.Text.Json.JsonSerializer.Serialize(finalResult);
