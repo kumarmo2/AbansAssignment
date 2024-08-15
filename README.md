@@ -5,7 +5,7 @@
 ## How To Run
 1. Run below command
    ```git clone git@github.com:kumarmo2/AbansAssignment.git abans-assignment && cd  AbansAssignment```
-2. [Build Images](##Build Images)
+2. [Build Images](#build-images)
 3. Create the docker network
 	- ```docker network create abx-network```
 4. Start the ABX Exchange server
@@ -20,7 +20,7 @@
 
 
 
-## Build Images
+## <a name="build-images"></a> Build Images
 
 ### Build ABX Server
 
