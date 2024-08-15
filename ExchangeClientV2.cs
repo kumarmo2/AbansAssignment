@@ -1,28 +1,28 @@
 using System.Buffers.Binary;
 using System.Net.Sockets;
+using Microsoft.Extensions.Options;
 
 namespace ABXConsoleClient;
 
-public class ExchangeClientV2 : IDisposable
+public class ExchangeClientV2 : IABXExchangeServerClient
 {
     private TcpClient _tcp;
-    private readonly string _address;
     // TODO: see if its possible to replace with buffStream
-    // TODO: make the stream lazy;
     private NetworkStream _stream;
-    private readonly int _port;
     private const int RETRIES = 5;
+    private readonly ExchangeServerConnectionConfig _exchangeServerConfig;
+    private readonly ILogger<ExchangeClientV2> _logger;
 
-    public ExchangeClientV2(string address, int port)
+    public ExchangeClientV2(IOptions<ExchangeServerConnectionConfig> exchangeConfig, ILogger<ExchangeClientV2> logger)
     {
-        _address = address;
-        _port = port;
+        _exchangeServerConfig = exchangeConfig.Value;
+        _logger = logger;
     }
 
     private void SetNewConnection()
     {
         var tcp = new TcpClient();
-        tcp.Connect(_address, _port);
+        tcp.Connect(_exchangeServerConfig.Host, _exchangeServerConfig.Port);
         var stream = tcp.GetStream();
         stream.ReadTimeout = 500;
         stream.WriteTimeout = 500;
@@ -38,21 +38,29 @@ public class ExchangeClientV2 : IDisposable
         }
     }
 
+    private void Reconnect()
+    {
+        FreeTCP();
+        SetNewConnection();
+    }
+
     private void FreeTCP()
     {
         if (_stream is not null)
         {
+            _stream.Close();
             _stream.Dispose();
             _stream = null;
         }
         if (_tcp is not null)
         {
+            _tcp.Close();
             _tcp.Dispose();
             _tcp = null;
         }
     }
 
-    private (int, ABXResponsePacket) ReadPacketV2(Span<byte> singlePacketBuffer, NetworkStream stream)
+    private static (int, ABXResponsePacket) ReadPacketV2(Span<byte> singlePacketBuffer, NetworkStream stream)
     {
         Span<char> chars = stackalloc char[4];
         var readBytes = stream.Read(singlePacketBuffer);
@@ -70,7 +78,6 @@ public class ExchangeClientV2 : IDisposable
             chars[j] = (char)symbolBytes[j];
         }
         var symbolString = new String(chars);
-        // var symbol = BinaryPrimitives.ReadUInt32BigEndian(symbolBytes);
         var orderType = (char)singlePacketBuffer[4];
         var quantityBytes = singlePacketBuffer.Slice(5, 4);
         var quantity = BinaryPrimitives.ReadUInt32BigEndian(quantityBytes);
@@ -98,26 +105,24 @@ public class ExchangeClientV2 : IDisposable
         {
             try
             {
-                Console.WriteLine($"get packet, retryNum: {retryNum}");
+                _logger.LogInformation("get packet, retryNum: {retryNum}", retryNum);
                 ABXRequest request = new ABXRequest { CallType = ABXRequest.RESEND_PACKET, ResendSeq = (byte)seq };
                 request.WriteToSTream(_stream);
-                Console.WriteLine($">>>> wrote to the stream, will now read");
                 var (bytesRead, packet) = ReadPacketV2(singlePacketBuffer, _stream);
                 if (bytesRead == 0 && retryNum < RETRIES - 1)
                 {
-                    Console.WriteLine("... bytesRead from GetPacket were 0, reconnecting");
-                    SetNewConnection();
+                    _logger.LogInformation("... bytesRead from GetPacket were 0, reconnecting");
+                    Reconnect();
                 }
                 else
                 {
                     return new Result<ABXResponsePacket, TimeoutException>(packet);
                 }
-                // return new Result<ABXResponsePacket, TimeoutException>(packet);
             }
             catch (IOException e)
             {
-                Console.WriteLine($"......caught IOException in client. will retry now,  {e.Message}");
-                SetNewConnection();
+                _logger.LogInformation("......caught IOException in client. will retry now,  {exceptionMessage}", e.Message);
+                Reconnect();
             }
             retryNum++;
             if (retryNum > 0)
@@ -158,8 +163,8 @@ public class ExchangeClientV2 : IDisposable
                 }
                 catch (IOException e)
                 {
-                    Console.WriteLine($"......caught IOException in client. will retry now,  {e.Message}");
-                    SetNewConnection();
+                    _logger.LogInformation("......caught IOException in client. will retry now,  {exceptionMessage}", e.Message);
+                    Reconnect();
                 }
                 retryNum++;
                 if (retryNum > 0)
