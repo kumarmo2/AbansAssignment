@@ -39,8 +39,6 @@ public class Worker
 
         var presentSequences = intermediateResults.ToDictionary(i => i.Sequence);
         var finalResult = new List<ABXResponsePacket>();
-        //
-        // Span<byte> singlePacketBuffer = stackalloc byte[ABXResponsePacket.PACKET_SIZE_BYTES];
         uint i = 1;
         using (var client = new ExchangeClientV2(address, port))
         {
@@ -74,6 +72,12 @@ public class Worker
             {
                 _logger.LogInformation("seq: {seq}", item.Sequence);
             }
+
+            var packets = System.Text.Json.JsonSerializer.Serialize(finalResult);
+            var path = Directory.GetCurrentDirectory() + "/a.json";
+            _logger.LogInformation("writing to the path: {path}", path);
+            File.WriteAllText(path, packets);
+
         }
     }
 
