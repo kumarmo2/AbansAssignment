@@ -32,7 +32,6 @@ public struct ABXRequest
         bytes[1] = ResendSeq;
         stream.Write(bytes);
         stream.Flush();
-
     }
 }
 

@@ -11,6 +11,6 @@ public class Program
 
         var sp = services.BuildServiceProvider();
         var worker = sp.GetService<Worker>();
-        worker.doWork();
+        worker.doWorkV2();
     }
 }

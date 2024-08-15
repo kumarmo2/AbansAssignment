@@ -5,7 +5,6 @@ using System.Net.Sockets;
 namespace ABXConsoleClient;
 
 
-public class CustomException : Exception { }
 public class Worker
 {
     private readonly ILogger<Worker> _logger;
@@ -13,6 +12,69 @@ public class Worker
     public Worker(ILogger<Worker> logger)
     {
         _logger = logger;
+    }
+    public void doWorkV2()
+    {
+        var address = "127.0.0.1";
+        var port = 3000;
+        List<ABXResponsePacket> intermediateResults = new List<ABXResponsePacket>();
+        using (var client = new ExchangeClientV2(address, port))
+        {
+            var allStreamResult = ExecuteAllStreamRequestV2(client);
+            if (allStreamResult.Err != null)
+            {
+                throw new Exception("Even After retrying, could not connect to the exchange server");
+            }
+            intermediateResults = allStreamResult.Ok;
+        }
+        _logger.LogInformation(">>>> stream was fetched <<<<");
+        Thread.Sleep(5000);
+        intermediateResults.Sort((first, second) =>
+                {
+                    return (int)first.Sequence - (int)second.Sequence;
+                });
+
+        var lastSeq = intermediateResults[intermediateResults.Count - 1].Sequence;
+        _logger.LogInformation("lastSeq: {lastSeq}", lastSeq);
+
+        var presentSequences = intermediateResults.ToDictionary(i => i.Sequence);
+        var finalResult = new List<ABXResponsePacket>();
+        //
+        // Span<byte> singlePacketBuffer = stackalloc byte[ABXResponsePacket.PACKET_SIZE_BYTES];
+        uint i = 1;
+        using (var client = new ExchangeClientV2(address, port))
+        {
+            while (i <= lastSeq)
+            {
+                if (presentSequences.ContainsKey(i))
+                {
+                    finalResult.Add(presentSequences[i]);
+                    i++;
+                    continue;
+                }
+                // _logger.LogInformation("packet i: {i} is missing, isClientConnected: {isClientConnected}", i, client.Connected);
+                _logger.LogInformation("packet i: {i} is missing", i);
+                Thread.Sleep(5000);
+                // _logger.LogInformation(">>> got the stream");
+                var packetResult = client.GetPacket((byte)i);
+                if (packetResult.Err != null)
+                {
+                    _logger.LogInformation("packet {i} could not be fetched even after retrying");
+                    i++;
+                    continue;
+                }
+                _logger.LogInformation("missing packet: {i} was fetched successfully", i);
+                var packet = packetResult.Ok;
+                finalResult.Add(packet);
+                i++;
+            }
+            _logger.LogInformation("is finalResult null: {isNull}", finalResult is null);
+
+            foreach (var item in finalResult)
+            {
+                _logger.LogInformation("seq: {seq}", item.Sequence);
+            }
+        }
     }
 
     public void doWork()
@@ -34,24 +96,21 @@ public class Worker
                 intermediateResults = result.Ok;
                 doneAllStreamRequest = true;
             }
-        }
-        _logger.LogInformation(">>>> stream was fetched <<<<");
-        // Thread.Sleep(5000);
-        intermediateResults.Sort((first, second) =>
-                {
-                    return (int)first.Sequence - (int)second.Sequence;
-                });
+            _logger.LogInformation(">>>> stream was fetched <<<<");
+            Thread.Sleep(5000);
+            intermediateResults.Sort((first, second) =>
+                    {
+                        return (int)first.Sequence - (int)second.Sequence;
+                    });
 
-        var lastSeq = intermediateResults[intermediateResults.Count - 1].Sequence;
-        _logger.LogInformation("lastSeq: {lastSeq}", lastSeq);
+            var lastSeq = intermediateResults[intermediateResults.Count - 1].Sequence;
+            _logger.LogInformation("lastSeq: {lastSeq}", lastSeq);
 
-        var presentSequences = intermediateResults.ToDictionary(i => i.Sequence);
-        var finalResult = new List<ABXResponsePacket>();
+            var presentSequences = intermediateResults.ToDictionary(i => i.Sequence);
+            var finalResult = new List<ABXResponsePacket>();
 
-        Span<byte> singlePacketBuffer = stackalloc byte[ABXResponsePacket.PACKET_SIZE_BYTES];
-        uint i = 1;
-        using (var client = new ABXExchangeServerClient(address, port))
-        {
+            Span<byte> singlePacketBuffer = stackalloc byte[ABXResponsePacket.PACKET_SIZE_BYTES];
+            uint i = 1;
             while (i <= lastSeq)
             {
                 if (presentSequences.ContainsKey(i))
@@ -64,14 +123,14 @@ public class Worker
                 {
                     // _logger.LogInformation("packet i: {i} is missing, isClientConnected: {isClientConnected}", i, client.Connected);
                     _logger.LogInformation("packet i: {i} is missing", i);
-                    // Thread.Sleep(5000);
+                    Thread.Sleep(5000);
                     // _logger.LogInformation(">>> got the stream");
                     ABXRequest request = new ABXRequest { CallType = ABXRequest.RESEND_PACKET, ResendSeq = (byte)i };
-                    // _logger.LogInformation("writing request for missing ResendSeq, seq: {i}", i);
+                    _logger.LogInformation("writing request for missing ResendSeq, seq: {i}", i);
                     client.WriteRequest(request);
                     // request.WriteToSTream(stream);
-                    // _logger.LogInformation(">>>>> write done, will read now after sleeping");
-                    // Thread.Sleep(5000);
+                    _logger.LogInformation(">>>>> write done, will read now after sleeping");
+                    Thread.Sleep(5000);
                     // TODO: maybe add re-trying logic.
 
                     (var bytesRead, var packet) = ReadPacketV2(singlePacketBuffer, client);
@@ -104,6 +163,10 @@ public class Worker
         }
     }
 
+    public Result<List<ABXResponsePacket>, TimeoutException> ExecuteAllStreamRequestV2(ExchangeClientV2 client)
+    {
+        return client.GetAllStreamResponse();
+    }
 
     public Result<List<ABXResponsePacket>, TimeoutException> ExecuteAllStreamRequest(ABXExchangeServerClient client)
     {
