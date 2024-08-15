@@ -71,7 +71,7 @@ public class Worker
         }
 
         var packets = System.Text.Json.JsonSerializer.Serialize(finalResult);
-        var path = Directory.GetCurrentDirectory() + "/a.json";
+        var path = Directory.GetCurrentDirectory() + "/dist/a.json";
         _logger.LogInformation("writing to the path: {path}", path);
         File.WriteAllText(path, packets);
 
