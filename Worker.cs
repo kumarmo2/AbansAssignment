@@ -26,22 +26,19 @@ public class Worker
                 throw new Exception("Even After retrying, could not connect to the exchange server");
             }
             intermediateResults = allStreamResult.Ok;
-        }
-        _logger.LogInformation(">>>> stream was fetched <<<<");
-        Thread.Sleep(5000);
-        intermediateResults.Sort((first, second) =>
-                {
-                    return (int)first.Sequence - (int)second.Sequence;
-                });
+            _logger.LogInformation(">>>> stream was fetched <<<<");
+            Thread.Sleep(5000);
+            intermediateResults.Sort((first, second) =>
+                    {
+                        return (int)first.Sequence - (int)second.Sequence;
+                    });
 
-        var lastSeq = intermediateResults[intermediateResults.Count - 1].Sequence;
-        _logger.LogInformation("lastSeq: {lastSeq}", lastSeq);
+            var lastSeq = intermediateResults[intermediateResults.Count - 1].Sequence;
+            _logger.LogInformation("lastSeq: {lastSeq}", lastSeq);
 
-        var presentSequences = intermediateResults.ToDictionary(i => i.Sequence);
-        var finalResult = new List<ABXResponsePacket>();
-        uint i = 1;
-        using (var client = new ExchangeClientV2(address, port))
-        {
+            var presentSequences = intermediateResults.ToDictionary(i => i.Sequence);
+            var finalResult = new List<ABXResponsePacket>();
+            uint i = 1;
             while (i <= lastSeq)
             {
                 if (presentSequences.ContainsKey(i))
