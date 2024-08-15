@@ -34,21 +34,24 @@ public class Worker
                 intermediateResults = result.Ok;
                 doneAllStreamRequest = true;
             }
-            _logger.LogInformation(">>>> stream was fetched <<<<");
-            Thread.Sleep(5000);
-            intermediateResults.Sort((first, second) =>
-                    {
-                        return (int)first.Sequence - (int)second.Sequence;
-                    });
+        }
+        _logger.LogInformation(">>>> stream was fetched <<<<");
+        // Thread.Sleep(5000);
+        intermediateResults.Sort((first, second) =>
+                {
+                    return (int)first.Sequence - (int)second.Sequence;
+                });
 
-            var lastSeq = intermediateResults[intermediateResults.Count - 1].Sequence;
-            _logger.LogInformation("lastSeq: {lastSeq}", lastSeq);
+        var lastSeq = intermediateResults[intermediateResults.Count - 1].Sequence;
+        _logger.LogInformation("lastSeq: {lastSeq}", lastSeq);
 
-            var presentSequences = intermediateResults.ToDictionary(i => i.Sequence);
-            var finalResult = new List<ABXResponsePacket>();
+        var presentSequences = intermediateResults.ToDictionary(i => i.Sequence);
+        var finalResult = new List<ABXResponsePacket>();
 
-            Span<byte> singlePacketBuffer = stackalloc byte[ABXResponsePacket.PACKET_SIZE_BYTES];
-            uint i = 1;
+        Span<byte> singlePacketBuffer = stackalloc byte[ABXResponsePacket.PACKET_SIZE_BYTES];
+        uint i = 1;
+        using (var client = new ABXExchangeServerClient(address, port))
+        {
             while (i <= lastSeq)
             {
                 if (presentSequences.ContainsKey(i))
@@ -61,14 +64,14 @@ public class Worker
                 {
                     // _logger.LogInformation("packet i: {i} is missing, isClientConnected: {isClientConnected}", i, client.Connected);
                     _logger.LogInformation("packet i: {i} is missing", i);
-                    Thread.Sleep(5000);
+                    // Thread.Sleep(5000);
                     // _logger.LogInformation(">>> got the stream");
                     ABXRequest request = new ABXRequest { CallType = ABXRequest.RESEND_PACKET, ResendSeq = (byte)i };
                     // _logger.LogInformation("writing request for missing ResendSeq, seq: {i}", i);
                     client.WriteRequest(request);
                     // request.WriteToSTream(stream);
-                    _logger.LogInformation(">>>>> write done, will read now after sleeping");
-                    Thread.Sleep(5000);
+                    // _logger.LogInformation(">>>>> write done, will read now after sleeping");
+                    // Thread.Sleep(5000);
                     // TODO: maybe add re-trying logic.
 
                     (var bytesRead, var packet) = ReadPacketV2(singlePacketBuffer, client);

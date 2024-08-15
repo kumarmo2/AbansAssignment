@@ -19,7 +19,7 @@ public class ABXExchangeServerClient : IDisposable
 
     private void MakeSureTCPConnectionIsConnected()
     {
-        if (!_tcp.Connected)
+        if (!_tcp.Client.Connected)
         {
             // Console.WriteLine(">>>>>> tcp is not connected");
             _tcp = new TcpClient();
@@ -28,10 +28,10 @@ public class ABXExchangeServerClient : IDisposable
             _stream = _tcp.GetStream();
             _stream.ReadTimeout = 500;
         }
-        else
-        {
-            Console.WriteLine(">>>>>> tcp is already connected");
-        }
+        // else
+        // {
+        //     Console.WriteLine(">>>>>> tcp is already connected");
+        // }
     }
 
     public int Read(Span<byte> buf)
