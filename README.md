@@ -4,7 +4,7 @@
 
 ## How To Run
 1. Run below command
-   ```git clone git@github.com:kumarmo2/AbansAssignment.git abans-assignment && cd  AbansAssignment```
+    - ```git clone git@github.com:kumarmo2/AbansAssignment.git abans-assignment && cd  AbansAssignment```
 2. [Build Images](#build-images)
 3. Create the docker network
 	- ```docker network create abx-network```
@@ -34,41 +34,4 @@ docker build -f exchange-server.Dockerfile -t abx-server .
 From the root of the project, run the below command
 ```
 docker build -f abx-client.Dockerfile -t abx-client .
-```
-
-
-### Start ABX Server
-
-
-
-### Start Client Console App
-
-
-
-
-## Prepare Docker images
-1. Build the Exchange server image by running the below command.
-	- ```docker build -f exchange-server.Dockerfile -t abx-server . ```
-2. Build the Console Application Image. 
-	- ```docker build -f abx-client.Dockerfile -t abx-client .```
-
-
-
-
-
-## Create docker network 
-```
-docker network create abx-network
-
-```
-
-```
-docker build -f abx-client.Dockerfile -t abx-client .
-
-```
-	2. Start the `Exchange Server`.
-		- ```docker run --rm --name abx-server -p 3000:3000 --network abx-network abx-server ```
-
-  3. Start client
-```docker run --rm --name abx-client -v "./dist:/app/dist" --network abx-network abx-client
 ```
