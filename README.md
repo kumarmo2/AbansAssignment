@@ -4,7 +4,7 @@
 
 ## How To Run
 1. Run below command
-    - ```git clone git@github.com:kumarmo2/AbansAssignment.git abans-assignment && cd  AbansAssignment```
+    - ```git clone git@github.com:kumarmo2/AbansAssignment.git abans-assignment && cd  abans-assignment```
 2. [Build Images](#build-images)
 3. Create the docker network
 	- ```docker network create abx-network```
