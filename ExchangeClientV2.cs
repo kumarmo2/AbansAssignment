@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Net.Sockets;
 using Microsoft.Extensions.Options;
 
@@ -12,6 +13,8 @@ public class ExchangeClientV2 : IABXExchangeServerClient
     private const int RETRIES = 5;
     private readonly ExchangeServerConnectionConfig _exchangeServerConfig;
     private readonly ILogger<ExchangeClientV2> _logger;
+    private const int _recoverableIssueWaitTimeout = 200;
+    private const int _nonRecoverableIssueWaitTimeout = 500;
 
     public ExchangeClientV2(IOptions<ExchangeServerConnectionConfig> exchangeConfig, ILogger<ExchangeClientV2> logger)
     {
@@ -21,11 +24,12 @@ public class ExchangeClientV2 : IABXExchangeServerClient
 
     private void SetNewConnection()
     {
+        _logger.LogDebug("connecting a new connection");
         var tcp = new TcpClient();
         tcp.Connect(_exchangeServerConfig.Host, _exchangeServerConfig.Port);
         var stream = tcp.GetStream();
-        stream.ReadTimeout = 200;
-        stream.WriteTimeout = 200;
+        stream.ReadTimeout = _recoverableIssueWaitTimeout;
+        stream.WriteTimeout = _recoverableIssueWaitTimeout;
         _tcp = tcp;
         _stream = stream;
     }
@@ -38,10 +42,35 @@ public class ExchangeClientV2 : IABXExchangeServerClient
         }
     }
 
-    private void Reconnect()
+    private void ReconnectOnRecoverableConnectionIssue()
     {
         FreeTCP();
         SetNewConnection();
+    }
+
+    private Result<bool, TimeoutException> TryReconnectingOnNonRecoverableConnectionIssue()
+    {
+        var retryNum = 0;
+        while (retryNum < RETRIES)
+        {
+            try
+            {
+                ReconnectOnRecoverableConnectionIssue();
+                return new Result<bool, TimeoutException>(true);
+            }
+            catch (SocketException e)
+            {
+                _logger.LogError("Could not connect to the exchange server, retryNum: {retryNum}, exceptionMessage: {exceptionMessage}", retryNum, e.Message);
+                if (retryNum == RETRIES - 1)
+                {
+                    _logger.LogError("even after retrying {retries} times, connection could not be established., exceptionMessage: {exceptionMessage}", RETRIES, e.Message);
+                    return new Result<bool, TimeoutException>(new TimeoutException());
+                }
+            }
+            retryNum++;
+            Thread.Sleep(retryNum * _nonRecoverableIssueWaitTimeout);
+        }
+        throw new UnreachableException();
     }
 
     private void FreeTCP()
@@ -98,13 +127,13 @@ public class ExchangeClientV2 : IABXExchangeServerClient
 
     public Result<ABXResponsePacket, TimeoutException> GetPacket(byte seq)
     {
-        SetNewConnectionIfRequired();
         var retryNum = 0;
         Span<byte> singlePacketBuffer = stackalloc byte[ABXResponsePacket.PACKET_SIZE_BYTES];
         while (retryNum < RETRIES)
         {
             try
             {
+                SetNewConnectionIfRequired();
                 _logger.LogInformation("get packet: {packet}, retryNum: {retryNum}", seq, retryNum);
                 ABXRequest request = new ABXRequest { CallType = ABXRequest.RESEND_PACKET, ResendSeq = (byte)seq };
                 request.WriteToSTream(_stream);
@@ -112,17 +141,26 @@ public class ExchangeClientV2 : IABXExchangeServerClient
                 if (bytesRead == 0 && retryNum < RETRIES - 1)
                 {
                     _logger.LogInformation("... bytesRead from GetPacket were 0, reconnecting");
-                    Reconnect();
+                    ReconnectOnRecoverableConnectionIssue();
                 }
                 else
                 {
                     return new Result<ABXResponsePacket, TimeoutException>(packet);
                 }
             }
+            catch (SocketException)
+            {
+                _logger.LogError("Looks like could not establish connection to the exchange server, retrying now...");
+                var result = TryReconnectingOnNonRecoverableConnectionIssue();
+                if (result.Err != null)
+                {
+                    return new Result<ABXResponsePacket, TimeoutException>(result.Err);
+                }
+            }
             catch (IOException e)
             {
-                _logger.LogInformation("......caught IOException in client. will retry now,  {exceptionMessage}", e.Message);
-                Reconnect();
+                _logger.LogError("......caught IOException in client. will retry now,  {exceptionMessage}", e.Message);
+                ReconnectOnRecoverableConnectionIssue();
             }
             retryNum++;
             if (retryNum > 0)
@@ -136,7 +174,6 @@ public class ExchangeClientV2 : IABXExchangeServerClient
 
     public Result<List<ABXResponsePacket>, TimeoutException> GetAllStreamResponse()
     {
-        SetNewConnectionIfRequired();
         Span<byte> singlePacketBuffer = stackalloc byte[ABXResponsePacket.PACKET_SIZE_BYTES];
         var packets = new List<ABXResponsePacket>();
         var retryNum = 0;
@@ -147,6 +184,7 @@ public class ExchangeClientV2 : IABXExchangeServerClient
             {
                 try
                 {
+                    SetNewConnectionIfRequired();
                     _logger.LogInformation(">>>> GetAllStreamResponse, retryNum: {retryNum}", retryNum);
                     var request = new ABXRequest { CallType = ABXRequest.STREAM_ALL, ResendSeq = 0 };
                     request.WriteToSTream(_stream);
@@ -161,10 +199,19 @@ public class ExchangeClientV2 : IABXExchangeServerClient
                     }
                     return new Result<List<ABXResponsePacket>, TimeoutException>(packets);
                 }
+                catch (SocketException)
+                {
+                    _logger.LogError("Looks like could not establish connection to the exchange server, retrying now...");
+                    var result = TryReconnectingOnNonRecoverableConnectionIssue();
+                    if (result.Err != null)
+                    {
+                        return new Result<List<ABXResponsePacket>, TimeoutException>(result.Err);
+                    }
+                }
                 catch (IOException e)
                 {
                     _logger.LogInformation("......caught IOException in client. will retry now,  {exceptionMessage}", e.Message);
-                    Reconnect();
+                    ReconnectOnRecoverableConnectionIssue();
                 }
                 retryNum++;
                 if (retryNum > 0)

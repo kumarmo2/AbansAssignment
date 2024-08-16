@@ -1,10 +1,12 @@
 
 ## Pre-requisites For Building
-1. docker
+1. [Docker](https://docs.docker.com/engine/install/)
+2. [git](https://git-scm.com/downloads)
+
 
 ## How To Run
 1. Run below command
-    - ```git clone git@github.com:kumarmo2/AbansAssignment.git abans-assignment && cd  abans-assignment```
+    - ```git clone https://github.com/kumarmo2/AbansAssignment.git abans-assignment && cd  abans-assignment```
 2. [Build Images](#build-images) for [Exchange-Server](#abx-server) and [ABX-Client-Console-App](#abx-client)
 3. Create the docker network
 	- ```docker network create abx-network```
@@ -20,7 +22,7 @@
           docker run --rm --name abx-client -v "./dist:/app/dist" --network abx-network abx-client
           ```
 	  2. This will run the container in attached mode, and in the terminal you should be able to monitor the logs of the client.
-	  3. If everything runs correctly, the container will shut down and the json output should be present in `dist` directory at the root of the 
+	  3. If everything runs correctly, the container will shut down and the json output should be present in `dist` directory at the root of the project.
 
 
 
