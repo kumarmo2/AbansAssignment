@@ -18,14 +18,15 @@ public class Worker
         _exchangeServerConfig = config.Value;
         client = c;
     }
-    public void doWorkV2()
+
+    public Result<bool, Exception> doWorkV2()
     {
         _logger.LogInformation("exchange server host: {host}, port: {port}", _exchangeServerConfig.Host, _exchangeServerConfig.Port);
         List<ABXResponsePacket> intermediateResults = new List<ABXResponsePacket>();
         var allStreamResult = client.GetAllStreamResponse();
         if (allStreamResult.Err != null)
         {
-            throw new Exception("Even After retrying, could not connect to the exchange server");
+            return new Result<bool, Exception>(allStreamResult.Err);
         }
         intermediateResults = allStreamResult.Ok;
         var waitMs = 2000;
@@ -50,13 +51,12 @@ public class Worker
                 i++;
                 continue;
             }
-            _logger.LogInformation("packet i: {i} is missing", i);
+            _logger.LogError("packet i: {i} is missing", i);
             var packetResult = client.GetPacket((byte)i);
             if (packetResult.Err != null)
             {
                 _logger.LogInformation("packet {i} could not be fetched even after retrying");
-                i++;
-                continue;
+                return new Result<bool, Exception>(packetResult.Err);
             }
             _logger.LogInformation("missing packet: {i} was fetched successfully", i);
             var packet = packetResult.Ok;
@@ -74,7 +74,7 @@ public class Worker
         var path = Directory.GetCurrentDirectory() + "/dist/a.json";
         _logger.LogInformation("writing to the path: {path}", path);
         File.WriteAllText(path, packets);
-
+        return new Result<bool, Exception>(true);
     }
 
 
