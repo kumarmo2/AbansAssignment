@@ -76,47 +76,4 @@ public class Worker
         File.WriteAllText(path, packets);
         return new Result<bool, Exception>(true);
     }
-
-
-
-    private (int, ABXResponsePacket) ReadPacketV2(Span<byte> singlePacketBuffer, ABXExchangeServerClient client)
-    {
-
-        Span<char> chars = stackalloc char[4];
-        var readBytes = client.Read(singlePacketBuffer);
-        if (readBytes <= 0)
-        {
-            return (0, null);
-        }
-        if (readBytes != ABXResponsePacket.PACKET_SIZE_BYTES)
-        {
-            throw new Exception("wrong size of the packet;");
-        }
-        var symbolBytes = singlePacketBuffer.Slice(0, 4);
-        for (var j = 0; j < 4; j++)
-        {
-            chars[j] = (char)symbolBytes[j];
-        }
-        var symbolString = new String(chars);
-        // var symbol = BinaryPrimitives.ReadUInt32BigEndian(symbolBytes);
-        var orderType = (char)singlePacketBuffer[4];
-        var quantityBytes = singlePacketBuffer.Slice(5, 4);
-        var quantity = BinaryPrimitives.ReadUInt32BigEndian(quantityBytes);
-        var priceBytes = singlePacketBuffer.Slice(9, 4);
-        var price = BinaryPrimitives.ReadUInt32BigEndian(priceBytes);
-        var seqBytes = singlePacketBuffer.Slice(13, 4);
-        var seq = BinaryPrimitives.ReadUInt32BigEndian(seqBytes);
-        // _logger.LogInformation($"symbolString: {symbolString},  orderType: {orderType}, quantity: {quantity}, price: {price}, seq: {seq}");
-        var packet = new ABXResponsePacket
-        {
-            Price = price,
-            Symbol = symbolString,
-            Quantity = quantity,
-            Sequence = seq,
-            OrderType = orderType,
-        };
-        return (readBytes, packet);
-    }
-
-
 }

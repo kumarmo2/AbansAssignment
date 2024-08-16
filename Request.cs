@@ -35,8 +35,6 @@ public struct ABXRequest
     }
 }
 
-// TODO: see if we can change this to a struct
-// or if we can somehow avoid/minimize heap allocation. 
 public class ABXResponsePacket
 {
     public static int PACKET_SIZE_BYTES = 17;

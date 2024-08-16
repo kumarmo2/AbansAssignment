@@ -8,13 +8,14 @@ namespace ABXConsoleClient;
 public class ExchangeClientV2 : IABXExchangeServerClient
 {
     private TcpClient _tcp;
-    // TODO: see if its possible to replace with buffStream
+    // PERF: Wrap this in BufferedStream in future. 
     private NetworkStream _stream;
     private const int RETRIES = 5;
     private readonly ExchangeServerConnectionConfig _exchangeServerConfig;
     private readonly ILogger<ExchangeClientV2> _logger;
     private const int _recoverableIssueWaitTimeout = 200;
     private const int _nonRecoverableIssueWaitTimeout = 500;
+    private bool _isDisposed = false;
 
     public ExchangeClientV2(IOptions<ExchangeServerConnectionConfig> exchangeConfig, ILogger<ExchangeClientV2> logger)
     {
@@ -229,17 +230,33 @@ public class ExchangeClientV2 : IABXExchangeServerClient
         return new Result<List<ABXResponsePacket>, TimeoutException>(new TimeoutException());
     }
 
+    protected virtual void Dispose(bool isDisposing)
+    {
+        if (!_isDisposed)
+        {
+            if (isDisposing)
+            {
+                if (_stream is not null)
+                {
+                    _stream.Dispose();
+                }
+                if (_tcp is not null)
+                {
+                    _tcp.Dispose();
+                }
+            }
+            _isDisposed = true;
+        }
+    }
 
     public void Dispose()
     {
-        // TODO: Implement dispose correctly.
-        if (_stream is not null)
-        {
-            _stream.Dispose();
-        }
-        if (_tcp is not null)
-        {
-            _tcp.Dispose();
-        }
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    ~ExchangeClientV2()
+    {
+        Dispose(false);
     }
 }
