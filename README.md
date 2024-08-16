@@ -1,10 +1,16 @@
 
+## Index
+
+- [Pre-requisites](#pre-requisites)
+- [How To Run](#how-to-run)
+
 ## Pre-requisites For Building
 1. [Docker](https://docs.docker.com/engine/install/)
 2. [git](https://git-scm.com/downloads)
 
 
-## How To Run
+
+## <a name="how-to-run"></a>How To Run
 1. Run below command
     - ```git clone https://github.com/kumarmo2/AbansAssignment.git abans-assignment && cd  abans-assignment```
 2. [Build Images](#build-images) for [Exchange-Server](#abx-server) and [ABX-Client-Console-App](#abx-client)
